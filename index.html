@@ -141,6 +141,7 @@ dialog video{width:100%;border-radius:10px;background:#000}
         <button class="go big" id="startBtn" disabled>Start countdown</button>
       </div>
       <div class="row" style="margin-top:8px">
+        <button class="big" id="pauseBtn" disabled hidden>Pause</button>
         <button class="stop big" id="stopBtn" disabled>Stop</button>
         <button class="pen big" id="penBtn" disabled>+3 s</button>
       </div>
@@ -203,6 +204,7 @@ dialog video{width:100%;border-radius:10px;background:#000}
       <button class="go big" id="sMark">Set finish at this frame</button>
       <button id="sUndo">Undo last lap</button>
       <button id="sResume">Resume recording</button>
+      <button class="stop" id="sStopT" hidden>Use stop time</button>
     </div>
   </div>
   <div class="photo" id="dlgPhoto"></div>
@@ -330,7 +332,7 @@ function setPhase(p){
   c.textContent = {idle:"Ready", countdown:"Lights", running:"Running", done:"Finished"}[p];
   const live = p === "countdown" || p === "running";
   $("startBtn").disabled = live || !stream;
-  $("stopBtn").disabled = p !== "running";
+  $("stopBtn").disabled = p !== "running"; $("pauseBtn").disabled = p !== "running";
   $("penBtn").disabled = !(p === "running" || p === "done");
   $("dnfBtn").disabled = p !== "running";
   $("abortBtn").disabled = !live;
@@ -373,7 +375,7 @@ function stopRecording(runId){
 function startCountdown(){
   if (!stream) return;
   beep(1, 0.01);
-  laps = []; pen = 0; jumped = false; manual = false; shots = []; lastCross = 0; goT = 0; frames = []; reviewing = false; live = false;
+  laps = []; pen = 0; jumped = false; manual = false; shots = []; lastCross = 0; goT = 0; frames = []; reviewing = false; live = false; stopped = false;
   $("laps").innerHTML = ""; $("photo").hidden = true; $("photo").innerHTML = ""; $("flag").textContent = "";
   curRun = {id: Date.now(), team: $("team").value, lapsN: S.lapsN};
   updateInfo(); showClock(0); setPhase("countdown"); startRecording(); resetBg();
@@ -410,7 +412,7 @@ function finish(status){
 $("startBtn").onclick = startCountdown;
 $("stopBtn").onclick = () => {
   if (phase !== "running") return;
-  if (S.mode === "manual"){ if (!reviewing) openLive(); return; }
+  if (S.mode === "manual"){ if (!stopped){ stopped = true; stopT = performance.now() - goT; openLive(true); } return; }
   manual = true; cross(performance.now(), "manual"); if (phase === "running") finish("ok");
 };
 $("dnfBtn").onclick = () => finish("dnf");
@@ -421,7 +423,7 @@ $("penBtn").onclick = () => {
 $("abortBtn").onclick = () => {
   cdTimers.forEach(clearTimeout); cdTimers = []; lightsOn(0);
   if (rec){ try{ rec.stop(); }catch(e){} rec = null; }
-  setPhase("idle"); showClock(0); $("flag").textContent = "Run aborted"; laps = []; frames = []; reviewing = false; updateInfo();
+  setPhase("idle"); showClock(0); $("flag").textContent = "Run aborted"; laps = []; frames = []; reviewing = false; stopped = false; updateInfo();
 };
 document.addEventListener("keydown", e => { if (e.code === "Space" && phase === "running"){ e.preventDefault(); $("stopBtn").click(); } });
 
@@ -519,7 +521,7 @@ function review(r, n){
   const box = $("dlgPhoto"); box.innerHTML = ""; v.shots.forEach(s => { const g = document.createElement("div"); g.className = "photo"; g.style.gridColumn = "1 / -1"; showShots(s, g); box.appendChild(g); });
   $("dlg").showModal();
 }
-$("dlgClose").onclick = () => { $("dlgVid").pause(); stopPlay(); if (live) resumeLive(); else $("dlg").close(); };
+$("dlgClose").onclick = () => { $("dlgVid").pause(); stopPlay(); if (live) closeLive(); else $("dlg").close(); };
 const step = d => { const v = $("dlgVid"); v.pause(); v.currentTime = Math.max(0, v.currentTime + d / (fps || 30)); };
 $("fBack").onclick = () => step(-1); $("fFwd").onclick = () => step(1);
 $("csvBtn").onclick = () => {
@@ -558,21 +560,35 @@ function setMode(m){
   $("modeAuto").setAttribute("aria-checked", m === "auto"); $("modeMan").setAttribute("aria-checked", m === "manual");
   $("modeNote").textContent = m === "auto"
     ? "The timer stops by itself when the car reaches the line and saves photo-finish frames."
-    : "Keeps recording with no line detection. Tap Pause & review, step to the frame where the car crosses, and set the finish there.";
-  $("stopBtn").textContent = m === "auto" ? "Stop" : "Pause & review";
+    : "Keeps recording with no line detection. Pause to check a frame and carry on, or Stop to end the run, then step to the frame where the car crosses and set the finish there.";
+  $("stopBtn").textContent = "Stop"; $("pauseBtn").hidden = m !== "manual";
 }
 $("modeAuto").onclick = () => { if (phase !== "running" && phase !== "countdown") setMode("auto"); };
 $("modeMan").onclick = () => { if (phase !== "running" && phase !== "countdown") setMode("manual"); };
 setMode(S.mode);
 
-function openLive(){
+let stopped = false, stopT = 0;
+function openLive(isStop){
   reviewing = true; live = true;
   if (rec && rec.state === "recording") try{ rec.pause(); }catch(e){}
-  $("dlgTitle").textContent = (curRun ? curRun.team : "") + " · paused";
+  $("dlgTitle").textContent = (curRun ? curRun.team : "") + (isStop ? " · stopped at " + fmt(stopT) : " · paused");
+  $("sResume").hidden = !!isStop; $("sStopT").hidden = !isStop;
+  $("sStopT").textContent = "Use stop time " + fmt(stopT);
   $("dlgPhoto").innerHTML = "";
-  showClock(frames.length ? frames[frames.length - 1].t : 0);
+  if (isStop) showClock(stopT);
+  else showClock(frames.length ? frames[frames.length - 1].t : 0);
   setTimeout(() => { openScrub(frames.filter(f => f.b), true, laps); $("dlg").showModal(); }, 150);   // let the last JPEGs finish
 }
+function useStopTime(){
+  if (phase !== "running") return;
+  stopPlay(); manual = true; live = false; reviewing = false;
+  laps.push(stopT); lastCross = stopT;
+  const li = document.createElement("li"); li.innerHTML = "<span>Finish (stop button)</span><span>" + fmt(stopT) + "</span>"; $("laps").appendChild(li);
+  finish("ok"); if ($("dlg").open) $("dlg").close();
+}
+function closeLive(){ if (stopped) useStopTime(); else resumeLive(); }
+$("pauseBtn").onclick = () => { if (phase === "running" && S.mode === "manual" && !reviewing && !stopped) openLive(false); };
+$("sStopT").onclick = useStopTime;
 function resumeLive(){
   stopPlay(); reviewing = false; live = false;
   if (rec && rec.state === "paused") try{ rec.resume(); }catch(e){}
@@ -634,7 +650,7 @@ $("sMark").onclick = () => {
 };
 $("sUndo").onclick = () => { if (!laps.length) return; laps.pop(); lastCross = laps.length ? laps[laps.length - 1] : 0; const lis = $("laps").children; if (lis.length) lis[lis.length - 1].remove(); updateInfo(); renderMarks(); showFrame(scr.i); };
 $("sResume").onclick = resumeLive;
-$("dlg").addEventListener("cancel", e => { if (live){ e.preventDefault(); resumeLive(); } });
+$("dlg").addEventListener("cancel", e => { if (live){ e.preventDefault(); closeLive(); } });
 
 setPhase("idle"); updateInfo(); renderResults();
 })();
