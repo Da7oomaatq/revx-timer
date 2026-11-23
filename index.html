@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RevX Race Timer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Race control: camera on the left, timer and controls on the right. Single dark theme on purpose (outdoor screen in a hood). */
+:root{
+  --bg:#0B1033; --panel:#121845; --panel2:#1A2157; --line:#2B336B;
+  --fg:#F4F4EF; --mute:#9AA3C7; --red:#E3120B; --yellow:#FFC20E; --green:#19C463;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);-webkit-tap-highlight-color:transparent}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;border-radius:10px;background:var(--panel2);color:var(--fg);padding:.7rem 1rem;font-weight:600;touch-action:manipulation}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+.app{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,1fr);gap:12px;height:100%;padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left))}
+@media (max-width:900px){.app{grid-template-columns:1fr;height:auto}}
+/* camera */
+.cam{position:relative;background:#000;border-radius:14px;overflow:hidden;min-height:260px;display:flex;align-items:center;justify-content:center}
+.cam canvas{max-width:100%;max-height:100%;display:block;touch-action:none}
+.cam .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;color:var(--mute)}
+.cam .empty b{color:var(--fg);font:800 1.6rem var(--display);letter-spacing:.02em}
+.meter{position:absolute;left:12px;right:12px;bottom:12px;height:10px;background:rgba(0,0,0,.55);border-radius:6px;overflow:hidden}
+.meter i{position:absolute;left:0;top:0;bottom:0;background:var(--green);width:0}
+.meter u{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--yellow)}
+.hint{position:absolute;left:12px;top:12px;background:rgba(11,16,51,.8);padding:6px 10px;border-radius:8px;font-size:.85rem;color:var(--mute)}
+/* side */
+.side{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto}
+.card{background:var(--panel);border-radius:14px;padding:14px}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brand h1{margin:0;font:italic 800 1.5rem var(--display);letter-spacing:.02em}
+.brand h1 span{color:var(--red)}
+.chip{font:700 .75rem var(--body);letter-spacing:.08em;text-transform:uppercase;padding:.3rem .6rem;border-radius:999px;background:var(--panel2);color:var(--mute)}
+.chip.run{background:var(--green);color:#04160C}.chip.cd{background:var(--red);color:#fff}.chip.done{background:var(--yellow);color:#171A21}
+.lights{display:flex;gap:8px;justify-content:center;margin:4px 0 10px}
+.lights i{width:34px;height:34px;border-radius:50%;background:#2A1416;border:3px solid #3A2024}
+.lights i.on{background:var(--red);border-color:#ff6b66;box-shadow:0 0 18px var(--red)}
+.lights.go i{background:var(--green);border-color:#7dffb2;box-shadow:0 0 18px var(--green)}
+.timer{font:800 clamp(3.2rem,7vw,5.4rem)/1 var(--display);text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.timer small{font-size:.5em;color:var(--mute)}
+.sub{display:flex;justify-content:center;gap:14px;color:var(--mute);font-size:.9rem;margin-top:6px;font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.flag{margin-top:8px;text-align:center;font:800 1.1rem var(--display);letter-spacing:.04em;color:var(--red);min-height:1.4em}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1 1 auto}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--mute);flex:1 1 120px;min-width:0}
+select,input[type=number],textarea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;width:100%}
+.big{font:800 1.5rem var(--display);letter-spacing:.04em;padding:1rem}
+.go{background:var(--green);color:#04160C}.stop{background:var(--red);color:#fff}.pen{background:var(--yellow);color:#171A21}
+.laps{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-variant-numeric:tabular-nums}
+.laps li{display:flex;justify-content:space-between;background:var(--panel2);border-radius:8px;padding:.4rem .7rem;font-size:.95rem}
+.photo{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.photo figure{margin:0}.photo img{width:100%;border-radius:8px;display:block;background:#000}
+.photo figcaption{font-size:.75rem;color:var(--mute);margin-top:2px;font-variant-numeric:tabular-nums}
+h2{margin:0 0 8px;font:italic 800 1.1rem var(--display);letter-spacing:.04em;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:.4rem .35rem;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-weight:600}
+td.best{color:var(--yellow);font-weight:700}
+.tbl{overflow-x:auto}
+.mini{padding:.35rem .6rem;font-size:.8rem;border-radius:8px}
+.row>.mini{flex:0 0 auto}
+details summary{cursor:pointer;font:italic 800 1.1rem var(--display);letter-spacing:.04em;text-transform:uppercase;list-style:none}
+details summary::after{content:" +";color:var(--mute)} details[open] summary::after{content:" –"}
+.set{display:grid;gap:10px;margin-top:10px}
+input[type=range]{width:100%;accent-color:var(--yellow)}
+.note{font-size:.8rem;color:var(--mute);line-height:1.4}
+.warn{background:#3A1013;border:1px solid var(--red);color:#FFD0CE;padding:10px;border-radius:10px;font-size:.85rem}
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;max-width:min(960px,96vw);width:96vw;padding:14px}
+dialog::backdrop{background:rgba(0,0,0,.7)}
+dialog video{width:100%;border-radius:10px;background:#000}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="cam" id="camBox" aria-label="Camera view">
+    <canvas id="view" aria-label="Live camera with the timing line"></canvas>
+    <div class="empty" id="empty">
+      <b>Camera is off</b>
+      <span>Point the camera at the finish line, then start it.</span>
+      <button class="go big" id="camBtn">Start camera</button>
+      <div class="warn" id="secureWarn" hidden>This page is not on a secure (https) address, so Chrome will block the camera. Open it from its https link.</div>
+    </div>
+    <div class="hint" id="hint" hidden>Drag on the picture to move the timing line</div>
+    <div class="meter" id="meter" hidden><i id="meterBar"></i><u id="meterThr"></u></div>
+  </section>
+
+  <aside class="side">
+    <div class="card">
+      <div class="brand"><h1>Rev<span>X</span> Race Timer</h1><span class="chip" id="phase">Ready</span></div>
+    </div>
+
+    <div class="card">
+      <div class="lights" id="lights"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="timer" id="clock">0:00.<small>000</small></div>
+      <div class="sub"><span id="lapInfo">Lap 0 / 1</span><span id="penInfo">Penalties 0</span><span id="fpsInfo">— fps</span></div>
+      <div class="flag" id="flag" role="status" aria-live="polite"></div>
+      <ul class="laps" id="laps"></ul>
+      <div class="photo" id="photo" hidden></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <label class="f" for="team">Team<select id="team"></select></label>
+        <label class="f" for="lapsN">Laps<input id="lapsN" type="number" min="1" max="20" value="1"></label>
+      </div>
+      <div class="row">
+        <button class="go big" id="startBtn" disabled>Start countdown</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="stop big" id="stopBtn" disabled>Stop</button>
+        <button class="pen big" id="penBtn" disabled>+3 s</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="dnfBtn" disabled>DNF</button>
+        <button id="abortBtn" disabled>Abort run</button>
+      </div>
+      <p class="note" style="margin:8px 0 0">Space bar = Stop. The timer starts when the lights go out and stops on its own when the car reaches the line.</p>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="tbl"><table><thead><tr><th>Team</th><th>Run</th><th>Time</th><th>Pen.</th><th>Total</th><th></th></tr></thead><tbody id="results"></tbody></table></div>
+      <p class="note" id="noRes">No runs yet.</p>
+      <div class="row" style="margin-top:8px"><button id="csvBtn">Save results (CSV)</button><button id="clearBtn">Clear results</button></div>
+      <div class="row" id="clearConfirm" hidden style="margin-top:8px"><span class="note">Delete all results?</span><button class="stop" id="clearYes">Delete</button><button id="clearNo">Keep</button></div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Setup</summary>
+        <div class="set">
+          <label class="f" for="camSel">Camera<select id="camSel"><option>Start the camera first</option></select></label>
+          <div class="row">
+            <label class="f" for="orient">Line direction<select id="orient"><option value="v">Vertical (car moves left/right)</option><option value="h">Horizontal (car moves up/down)</option></select></label>
+          </div>
+          <label class="f" for="sens">Sensitivity <span id="sensV"></span><input id="sens" type="range" min="1" max="10" value="6"></label>
+          <label class="f" for="strip">Line thickness <span id="stripV"></span><input id="strip" type="range" min="1" max="12" value="3"></label>
+          <label class="f" for="lock">Ignore the line for (s) after the start and after each lap<input id="lock" type="number" min="0.5" max="60" step="0.5" value="3"></label>
+          <label class="f" for="hold">Lights out<select id="hold"><option value="rand">Random 0.5–2.5 s after 5 lights (F1)</option><option value="fixed">1 s after 5 lights</option></select></label>
+          <label class="f" for="jump">Jump-start check<select id="jump"><option value="on">On: car must be still on the line during the lights</option><option value="off">Off</option></select></label>
+          <label class="f" for="rec">Record video of each run<select id="rec"><option value="on">On</option><option value="off">Off</option></select></label>
+          <label class="f" for="teams">Teams (one per line)<textarea id="teams" rows="5"></textarea></label>
+          <div class="row"><button id="fsBtn">Full screen</button><button id="testBtn">Test beep</button></div>
+          <p class="note">Precision is one camera frame: at 30 fps that is ±0.033 s, at 60 fps ±0.017 s. The photo-finish frames show the frame before the car reached the line and the frame it did.</p>
+        </div>
+      </details>
+    </div>
+  </aside>
+</div>
+
+<dialog id="dlg">
+  <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 id="dlgTitle" style="margin:0">Run video</h2><button id="dlgClose" class="mini">Close</button></div>
+  <video id="dlgVid" controls playsinline></video>
+  <div class="row" style="margin-top:8px">
+    <button id="fBack">◀ 1 frame</button><button id="fFwd">1 frame ▶</button><a id="dlgSave"><button style="width:100%">Save video</button></a>
+  </div>
+  <div class="photo" id="dlgPhoto"></div>
+</dialog>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("revxTimer."+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem("revxTimer."+k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- settings ---------- */
+const S = Object.assign({orient:"v", sens:6, strip:3, lock:3, hold:"rand", jump:"on", rec:"on", lapsN:1,
+  line:0.5, teams:["Team 1","Team 2","Team 3","Team 4","Team 5","Team 6","Team 7","Team 8"], camId:""}, store.get("settings", {}));
+const save = () => store.set("settings", S);
+["orient","sens","strip","lock","hold","jump","rec"].forEach(k => {
+  const el = $(k); el.value = S[k];
+  el.addEventListener("input", () => { S[k] = el.type==="range"||el.type==="number" ? +el.value : el.value; save(); labels(); resetBg(); });
+});
+$("lapsN").value = S.lapsN;
+$("lapsN").addEventListener("input", () => { S.lapsN = Math.max(1, Math.min(20, +$("lapsN").value||1)); save(); updateInfo(); });
+$("teams").value = S.teams.join("\n");
+$("teams").addEventListener("input", () => { S.teams = $("teams").value.split("\n").map(s=>s.trim()).filter(Boolean); save(); fillTeams(); });
+function fillTeams(){ const cur = $("team").value; $("team").innerHTML = ""; S.teams.forEach(t => { const o = document.createElement("option"); o.textContent = t; $("team").appendChild(o); }); if (S.teams.includes(cur)) $("team").value = cur; }
+function labels(){ $("sensV").textContent = S.sens + " / 10"; $("stripV").textContent = S.strip + "% of the picture"; }
+fillTeams(); labels();
+if (!window.isSecureContext) $("secureWarn").hidden = false;
+
+/* ---------- audio ---------- */
+let ac = null;
+function beep(freq, dur){
+  try{
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "square"; o.frequency.value = freq; g.gain.value = 0.15;
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + dur);
+  }catch(e){}
+}
+$("testBtn").onclick = () => beep(880, 0.2);
+
+/* ---------- camera ---------- */
+const video = document.createElement("video"); video.muted = true; video.playsInline = true;
+const view = $("view"), vctx = view.getContext("2d");
+const prev = document.createElement("canvas"), pctx = prev.getContext("2d");
+const samp = document.createElement("canvas"), sctx = samp.getContext("2d", {willReadFrequently:true});
+let stream = null, fps = 0, lastFrameT = 0;
+
+async function startCam(id){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  const v = {width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:60}};
+  if (id) v.deviceId = {exact:id}; else v.facingMode = {ideal:"environment"};
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:v, audio:false});
+  }catch(e){
+    $("flag").textContent = e.name === "NotAllowedError" ? "Camera blocked: allow it in Chrome's site settings." : "Camera did not start: " + e.message;
+    return;
+  }
+  video.srcObject = stream; await video.play();
+  const st = stream.getVideoTracks()[0].getSettings(); S.camId = st.deviceId || ""; save();
+  view.width = video.videoWidth; view.height = video.videoHeight;
+  prev.width = view.width; prev.height = view.height;
+  $("empty").hidden = true; $("hint").hidden = false; $("meter").hidden = false; $("startBtn").disabled = false;
+  setTimeout(() => $("hint").hidden = true, 6000);
+  resetBg();
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  $("camSel").innerHTML = "";
+  devs.forEach((d, i) => { const o = document.createElement("option"); o.value = d.deviceId; o.textContent = d.label || ("Camera " + (i+1)); $("camSel").appendChild(o); });
+  $("camSel").value = S.camId;
+  if ("requestVideoFrameCallback" in video) video.requestVideoFrameCallback(onFrame);
+  else { const loop = () => { onFrame(performance.now(), {}); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+}
+$("camBtn").onclick = () => { beep(660, 0.05); startCam(S.camId); };
+$("camSel").onchange = () => startCam($("camSel").value);
+
+/* drag the line */
+function setLineFromEvent(e){
+  const r = view.getBoundingClientRect();
+  S.line = S.orient === "v" ? (e.clientX - r.left) / r.width : (e.clientY - r.top) / r.height;
+  S.line = Math.max(0.02, Math.min(0.98, S.line)); resetBg();
+}
+let dragging = false;
+view.addEventListener("pointerdown", e => { if (phase === "running" || phase === "countdown") return; dragging = true; view.setPointerCapture(e.pointerId); setLineFromEvent(e); });
+view.addEventListener("pointermove", e => { if (dragging) setLineFromEvent(e); });
+view.addEventListener("pointerup", () => { if (dragging){ dragging = false; save(); } });
+
+/* ---------- detection ---------- */
+let bg = null, occupied = false, quietFrames = 0, level = 0;
+function resetBg(){ bg = null; occupied = false; }
+function stripRect(){
+  const W = view.width, H = view.height, frac = S.strip / 100;
+  if (S.orient === "v"){ const w = Math.max(4, W * frac); return [Math.min(W - w, Math.max(0, S.line * W - w/2)), 0, w, H]; }
+  const h = Math.max(4, H * frac); return [0, Math.min(H - h, Math.max(0, S.line * H - h/2)), W, h];
+}
+function detect(){
+  const [x, y, w, h] = stripRect();
+  const sw = S.orient === "v" ? 8 : 128, sh = S.orient === "v" ? 128 : 8;
+  samp.width = sw; samp.height = sh;
+  sctx.drawImage(video, x, y, w, h, 0, 0, sw, sh);
+  const d = sctx.getImageData(0, 0, sw, sh).data, n = sw * sh;
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) lum[i] = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+  if (!bg || bg.length !== n){ bg = lum; return 0; }
+  const T = 62 - S.sens * 5;            // pixel change needed (sens 10 -> 12, sens 1 -> 57)
+  let changed = 0;
+  for (let i = 0; i < n; i++) if (Math.abs(lum[i] - bg[i]) > T) changed++;
+  const f = changed / n;
+  if (f < 0.02) for (let i = 0; i < n; i++) bg[i] = bg[i]*0.92 + lum[i]*0.08;   // follow slow light changes
+  return f;
+}
+const TRIG = () => 0.16 - S.sens * 0.012;   // share of the line that must change (sens 10 -> 4%, sens 1 -> 15%)
+
+/* ---------- race state ---------- */
+let phase = "idle", goT = 0, cdTimers = [], laps = [], lastCross = 0, pen = 0, jumped = false, manual = false;
+let curRun = null, rec = null, chunks = [], shots = [];
+const results = store.get("results", []);
+const vids = {};   // run id -> {url, shots}
+
+function setPhase(p){
+  phase = p;
+  const c = $("phase");
+  c.className = "chip" + (p === "running" ? " run" : p === "countdown" ? " cd" : p === "done" ? " done" : "");
+  c.textContent = {idle:"Ready", countdown:"Lights", running:"Running", done:"Finished"}[p];
+  const live = p === "countdown" || p === "running";
+  $("startBtn").disabled = live || !stream;
+  $("stopBtn").disabled = p !== "running";
+  $("penBtn").disabled = !(p === "running" || p === "done");
+  $("dnfBtn").disabled = p !== "running";
+  $("abortBtn").disabled = !live;
+  $("team").disabled = live; $("lapsN").disabled = live;
+}
+function fmt(ms){
+  if (ms < 0) ms = 0;
+  const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60, r = Math.floor(ms % 1000);
+  return m + ":" + String(s).padStart(2, "0") + "." + String(r).padStart(3, "0");
+}
+function updateInfo(){
+  $("lapInfo").textContent = "Lap " + Math.min(laps.length, S.lapsN) + " / " + S.lapsN;
+  $("penInfo").textContent = "Penalties " + pen + (pen ? " (+" + (pen*3) + " s)" : "");
+}
+function showClock(ms){ const t = fmt(ms); const i = t.lastIndexOf("."); $("clock").innerHTML = t.slice(0, i+1) + "<small>" + t.slice(i+1) + "</small>"; }
+function lightsOn(n, go){ const ls = $("lights"); ls.classList.toggle("go", !!go); [...ls.children].forEach((l, i) => l.classList.toggle("on", !go && i < n)); }
+
+function startRecording(){
+  chunks = [];
+  if (S.rec !== "on" || !view.captureStream || !window.MediaRecorder) { rec = null; return; }
+  const types = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"];
+  const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || "";
+  try{
+    rec = new MediaRecorder(view.captureStream(Math.max(30, Math.round(fps) || 30)), mime ? {mimeType: mime, videoBitsPerSecond: 6e6} : {});
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    rec.start(500);
+  }catch(e){ rec = null; }
+}
+function stopRecording(runId){
+  if (!rec) { vids[runId] = {url:null, shots:shots.slice()}; return; }
+  const r = rec; rec = null;
+  r.onstop = () => {
+    const blob = new Blob(chunks, {type: r.mimeType || "video/webm"});
+    vids[runId] = {url: URL.createObjectURL(blob), shots: shots.slice(), ext: (r.mimeType||"").includes("mp4") ? "mp4" : "webm"};
+    renderResults();
+  };
+  setTimeout(() => { try{ r.stop(); }catch(e){} }, 1500);
+}
+
+function startCountdown(){
+  if (!stream) return;
+  beep(1, 0.01);
+  laps = []; pen = 0; jumped = false; manual = false; shots = []; lastCross = 0; goT = 0;
+  $("laps").innerHTML = ""; $("photo").hidden = true; $("photo").innerHTML = ""; $("flag").textContent = "";
+  curRun = {id: Date.now(), team: $("team").value, lapsN: S.lapsN};
+  updateInfo(); showClock(0); setPhase("countdown"); startRecording(); resetBg();
+  lightsOn(0);
+  for (let i = 1; i <= 5; i++) cdTimers.push(setTimeout(() => { lightsOn(i); beep(440, 0.15); }, i * 1000));
+  const hold = S.hold === "rand" ? 500 + Math.random() * 2000 : 1000;
+  cdTimers.push(setTimeout(go, 5000 + hold));
+}
+function go(){
+  goT = performance.now(); lastCross = 0;
+  lightsOn(0, true); beep(880, 0.35); setPhase("running");
+  if (jumped) $("flag").textContent = "JUMP START: the car moved during the lights";
+  setTimeout(() => { if (phase === "running") $("lights").classList.remove("go"); }, 1500);
+}
+function cross(frameT, source){
+  const t = frameT - goT;
+  laps.push(t); lastCross = t;
+  const li = document.createElement("li");
+  const lapT = laps.length > 1 ? t - laps[laps.length - 2] : t;
+  li.innerHTML = "<span>Lap " + laps.length + (source === "manual" ? " (manual)" : "") + "</span><span>" + fmt(lapT) + "</span>";
+  $("laps").appendChild(li); beep(1320, 0.12); updateInfo();
+  if (laps.length >= S.lapsN) finish("ok");
+}
+function finish(status){
+  if (phase !== "running") return;
+  const total = laps.length ? laps[laps.length - 1] : performance.now() - goT;
+  setPhase("done"); showClock(total);
+  const r = Object.assign(curRun, {time: status === "dnf" ? null : total, laps: laps.slice(), pen, jump: jumped, manual, status});
+  results.unshift(r); store.set("results", results);
+  stopRecording(r.id); renderResults();
+  if (status === "dnf") $("flag").textContent = "DNF";
+}
+$("startBtn").onclick = startCountdown;
+$("stopBtn").onclick = () => { if (phase === "running"){ manual = true; cross(performance.now(), "manual"); if (phase === "running") finish("ok"); } };
+$("dnfBtn").onclick = () => finish("dnf");
+$("penBtn").onclick = () => {
+  pen++; updateInfo(); beep(300, 0.2);
+  if (phase === "done" && results[0] && results[0].id === curRun.id){ results[0].pen = pen; store.set("results", results); renderResults(); }
+};
+$("abortBtn").onclick = () => {
+  cdTimers.forEach(clearTimeout); cdTimers = []; lightsOn(0);
+  if (rec){ try{ rec.stop(); }catch(e){} rec = null; }
+  setPhase("idle"); showClock(0); $("flag").textContent = "Run aborted"; laps = []; updateInfo();
+};
+document.addEventListener("keydown", e => { if (e.code === "Space" && phase === "running"){ e.preventDefault(); $("stopBtn").click(); } });
+
+/* ---------- per-frame: draw, detect, overlay ---------- */
+function onFrame(now, meta){
+  const ft = (meta && (meta.captureTime || meta.expectedDisplayTime)) || now;
+  if (lastFrameT) { const dt = ft - lastFrameT; if (dt > 0 && dt < 500) fps = fps ? fps * 0.9 + (1000/dt) * 0.1 : 1000/dt; }
+  lastFrameT = ft;
+  if (phase === "running") { pctx.drawImage(view, 0, 0); }         // keep the previous composed frame
+  vctx.drawImage(video, 0, 0, view.width, view.height);
+  const f = detect(); level = f;
+  const trig = TRIG();
+  let hit = false;
+  if (!occupied && f > trig){ occupied = true; quietFrames = 0; hit = true; }
+  else if (occupied){ if (f < trig * 0.4) { if (++quietFrames > 4) occupied = false; } else quietFrames = 0; }
+
+  if (phase === "countdown" && f > trig && S.jump === "on" && !jumped){ jumped = true; }
+  let crossing = false;
+  if (phase === "running" && hit){
+    const t = ft - goT, since = t - lastCross;
+    if (since > S.lock * 1000) crossing = true;
+  }
+  overlay(ft, crossing);
+  if (crossing){
+    const tRel = ft - goT;
+    const prevT = tRel - (fps ? 1000 / fps : 33);
+    shots.push({lap: laps.length + 1, before: prev.toDataURL("image/jpeg", 0.8), at: view.toDataURL("image/jpeg", 0.8), tBefore: prevT, tAt: tRel});
+    showShots(shots[shots.length - 1], $("photo")); $("photo").hidden = false;
+    cross(ft, "camera");
+  }
+  // meter
+  $("meterBar").style.width = Math.min(100, f * 100 / 0.4) + "%";
+  $("meterBar").style.background = occupied ? "var(--red)" : "var(--green)";
+  $("meterThr").style.left = Math.min(100, trig * 100 / 0.4) + "%";
+  $("fpsInfo").textContent = (fps ? Math.round(fps) : "—") + " fps";
+  if (phase === "running") showClock(performance.now() - goT);
+  if ("requestVideoFrameCallback" in video) video.requestVideoFrameCallback(onFrame);
+}
+function overlay(ft, crossing){
+  const W = view.width, H = view.height, u = Math.max(1, W / 1280);
+  const [x, y, w, h] = stripRect();
+  vctx.fillStyle = occupied ? "rgba(227,18,11,.28)" : "rgba(255,194,14,.18)"; vctx.fillRect(x, y, w, h);
+  vctx.strokeStyle = occupied ? "#E3120B" : "#FFC20E"; vctx.lineWidth = 3 * u; vctx.setLineDash([12*u, 8*u]);
+  vctx.beginPath();
+  if (S.orient === "v"){ vctx.moveTo(x + w/2, 0); vctx.lineTo(x + w/2, H); } else { vctx.moveTo(0, y + h/2); vctx.lineTo(W, y + h/2); }
+  vctx.stroke(); vctx.setLineDash([]);
+  // burned-in time box
+  const t = phase === "running" ? ft - goT : phase === "done" && laps.length ? laps[laps.length-1] : 0;
+  const team = curRun ? curRun.team : $("team").value;
+  vctx.fillStyle = "rgba(11,16,51,.82)"; vctx.fillRect(12*u, 12*u, 420*u, 92*u);
+  vctx.fillStyle = "#E3120B"; vctx.fillRect(12*u, 12*u, 6*u, 92*u);
+  vctx.fillStyle = "#9AA3C7"; vctx.font = (600*1) + " " + (18*u) + "px Barlow, sans-serif";
+  vctx.fillText(team + "  ·  " + (phase === "countdown" ? "LIGHTS" : phase === "running" ? "LAP " + (laps.length + 1) : phase === "done" ? "FINISHED" : "READY"), 30*u, 38*u);
+  vctx.fillStyle = crossing ? "#FFC20E" : "#F4F4EF"; vctx.font = "800 " + (50*u) + "px 'Barlow Condensed', sans-serif";
+  vctx.fillText(fmt(t), 30*u, 90*u);
+  vctx.fillStyle = "#9AA3C7"; vctx.font = 600 + " " + (14*u) + "px Barlow, sans-serif";
+  vctx.fillText(new Date().toLocaleTimeString(), 300*u, 90*u);
+  if (crossing){ vctx.strokeStyle = "#FFC20E"; vctx.lineWidth = 8*u; vctx.strokeRect(4*u, 4*u, W - 8*u, H - 8*u); }
+}
+function showShots(s, box){
+  box.innerHTML = "";
+  [["before", s.before, s.tBefore, "Frame before"], ["at", s.at, s.tAt, "Frame at the line"]].forEach(([k, src, t, label]) => {
+    const fig = document.createElement("figure"), img = document.createElement("img"), cap = document.createElement("figcaption");
+    img.src = src; img.alt = label + " (lap " + s.lap + ")"; cap.textContent = "Lap " + s.lap + " · " + label + " · " + fmt(t);
+    fig.append(img, cap); box.appendChild(fig);
+  });
+}
+
+/* ---------- results ---------- */
+function renderResults(){
+  const tb = $("results"); tb.innerHTML = "";
+  $("noRes").hidden = results.length > 0;
+  const best = {};
+  results.forEach(r => { if (r.status === "ok" && !r.jump){ const tot = r.time + r.pen * 3000; if (best[r.team] == null || tot < best[r.team]) best[r.team] = tot; } });
+  const runNo = {}; [...results].reverse().forEach(r => { runNo[r.id] = (runNo[r.team] = (runNo[r.team] || 0) + 1); });
+  results.forEach(r => {
+    const tr = document.createElement("tr");
+    const tot = r.status === "ok" ? r.time + r.pen * 3000 : null;
+    const cells = [r.team, runNo[r.id], r.status === "ok" ? fmt(r.time) + (r.manual ? " (M)" : "") : "DNF", r.pen ? "+" + r.pen*3 + " s" : "–",
+      tot == null ? "–" : fmt(tot) + (r.jump ? " JS" : "")];
+    cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i === 4 && tot != null && tot === best[r.team] && !r.jump) td.className = "best"; tr.appendChild(td); });
+    const td = document.createElement("td");
+    if (vids[r.id]){ const b = document.createElement("button"); b.className = "mini"; b.textContent = "Review"; b.onclick = () => review(r, runNo[r.id]); td.appendChild(b); }
+    tr.appendChild(td); tb.appendChild(tr);
+  });
+}
+function review(r, n){
+  const v = vids[r.id]; $("dlgTitle").textContent = r.team + " · run " + n;
+  const vid = $("dlgVid"); vid.hidden = !v.url; $("dlgSave").hidden = !v.url;
+  if (v.url){ vid.src = v.url; $("dlgSave").href = v.url; $("dlgSave").download = (r.team + "-run" + n).replace(/\s+/g, "_") + "." + (v.ext || "webm"); }
+  const box = $("dlgPhoto"); box.innerHTML = ""; v.shots.forEach(s => { const g = document.createElement("div"); g.className = "photo"; g.style.gridColumn = "1 / -1"; showShots(s, g); box.appendChild(g); });
+  $("dlg").showModal();
+}
+$("dlgClose").onclick = () => { $("dlgVid").pause(); $("dlg").close(); };
+const step = d => { const v = $("dlgVid"); v.pause(); v.currentTime = Math.max(0, v.currentTime + d / (fps || 30)); };
+$("fBack").onclick = () => step(-1); $("fFwd").onclick = () => step(1);
+$("csvBtn").onclick = () => {
+  const rows = [["Team","Time (s)","Penalties","Penalty (s)","Total (s)","Status","Jump start","Manual stop","Laps (s)","Recorded at"]];
+  [...results].reverse().forEach(r => rows.push([r.team, r.time == null ? "" : (r.time/1000).toFixed(3), r.pen, r.pen*3,
+    r.status === "ok" ? ((r.time + r.pen*3000)/1000).toFixed(3) : "", r.status, r.jump ? "yes" : "", r.manual ? "yes" : "",
+    r.laps.map((t, i) => ((t - (i ? r.laps[i-1] : 0))/1000).toFixed(3)).join(" | "), new Date(r.id).toLocaleString()]));
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"})); a.download = "revx-results.csv"; a.click();
+};
+$("clearBtn").onclick = () => { $("clearConfirm").hidden = false; };
+$("clearNo").onclick = () => { $("clearConfirm").hidden = true; };
+$("clearYes").onclick = () => { results.length = 0; store.set("results", results); renderResults(); $("clearConfirm").hidden = true; };
+$("fsBtn").onclick = () => { const d = document.documentElement; (d.requestFullscreen ? d.requestFullscreen() : Promise.reject()).catch(() => {}); };
+
+/* keep the screen on */
+async function wake(){ try{ if (navigator.wakeLock) await navigator.wakeLock.request("screen"); }catch(e){} }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
+wake();
+
+setPhase("idle"); updateInfo(); renderResults();
+})();
+</script>
+</body>
+</html>
