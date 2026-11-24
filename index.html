@@ -56,7 +56,7 @@ button:disabled{opacity:.4;cursor:default}
 .flag{margin-top:6px;text-align:center;font:800 clamp(1.1rem,1.6vw,1.6rem) var(--display);letter-spacing:.04em;color:var(--red);min-height:1.4em}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>*{flex:1 1 auto}
-label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--mute);flex:1 1 120px;min-width:0}
+.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--mute);flex:1 1 120px;min-width:0}
 select,input[type=number],textarea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;width:100%}
 .big{font:800 1.5rem var(--display);letter-spacing:.04em;padding:1rem}
 .go{background:var(--green);color:#04160C}.stop{background:var(--red);color:#fff}.pen{background:var(--yellow);color:#171A21}
@@ -168,6 +168,24 @@ dialog video{width:100%;border-radius:10px;background:#000}
           <div class="row">
             <label class="f" for="orient">Line direction<select id="orient"><option value="v">Vertical (car moves left/right)</option><option value="h">Horizontal (car moves up/down)</option></select></label>
           </div>
+          <div class="f">
+            <label for="tilt">Line tilt <span id="tiltV"></span></label>
+            <div class="row" style="flex-wrap:nowrap">
+              <button class="mini" id="tiltM" aria-label="Tilt 1 degree left">−1°</button>
+              <input id="tilt" type="range" min="-45" max="45" step="1" value="0" style="flex:1 1 auto">
+              <button class="mini" id="tiltP" aria-label="Tilt 1 degree right">+1°</button>
+              <button class="mini" id="tilt0">Straight</button>
+            </div>
+          </div>
+          <div class="f">
+            <label for="taper">Line taper (for distance) <span id="taperV"></span></label>
+            <div class="row" style="flex-wrap:nowrap">
+              <button class="mini" id="taperM" aria-label="Taper 5 percent less">−5</button>
+              <input id="taper" type="range" min="-80" max="80" step="5" value="0" style="flex:1 1 auto">
+              <button class="mini" id="taperP" aria-label="Taper 5 percent more">+5</button>
+              <button class="mini" id="taper0">Even</button>
+            </div>
+          </div>
           <label class="f" for="sens">Sensitivity <span id="sensV"></span><input id="sens" type="range" min="1" max="10" value="6"></label>
           <label class="f" for="strip">Line thickness <span id="stripV"></span><input id="strip" type="range" min="1" max="12" value="3"></label>
           <label class="f" for="lock">Ignore the line for (s) after the start and after each lap<input id="lock" type="number" min="0.5" max="60" step="0.5" value="3"></label>
@@ -220,10 +238,10 @@ const store = {
 };
 
 /* ---------- settings ---------- */
-const S = Object.assign({mode:"auto", orient:"v", sens:6, strip:3, lock:3, hold:"rand", jump:"on", rec:"on", lapsN:1,
+const S = Object.assign({mode:"auto", orient:"v", sens:6, strip:3, lock:3, hold:"rand", jump:"on", rec:"on", lapsN:1, tilt:0, taper:0,
   line:0.5, teams:["Team 1","Team 2","Team 3","Team 4","Team 5","Team 6","Team 7","Team 8"], camId:""}, store.get("settings", {}));
 const save = () => store.set("settings", S);
-["orient","sens","strip","lock","hold","jump","rec"].forEach(k => {
+["orient","sens","strip","lock","hold","jump","rec","tilt","taper"].forEach(k => {
   const el = $(k); el.value = S[k];
   el.addEventListener("input", () => { S[k] = el.type==="range"||el.type==="number" ? +el.value : el.value; save(); labels(); resetBg(); });
 });
@@ -232,8 +250,17 @@ $("lapsN").addEventListener("input", () => { S.lapsN = Math.max(1, Math.min(20, 
 $("teams").value = S.teams.join("\n");
 $("teams").addEventListener("input", () => { S.teams = $("teams").value.split("\n").map(s=>s.trim()).filter(Boolean); save(); fillTeams(); });
 function fillTeams(){ const cur = $("team").value; $("team").innerHTML = ""; S.teams.forEach(t => { const o = document.createElement("option"); o.textContent = t; $("team").appendChild(o); }); if (S.teams.includes(cur)) $("team").value = cur; }
-function labels(){ $("sensV").textContent = S.sens + " / 10"; $("stripV").textContent = S.strip + "% of the picture"; }
+function labels(){ const tp = S.taper || 0, near = S.orient === "v" ? ["top", "bottom"] : ["left", "right"];
+  $("taperV").textContent = tp === 0 ? "even" : "wider at the " + (tp > 0 ? near[1] : near[0]) + " (" + Math.round((1 + Math.abs(tp)/100) / (1 - Math.abs(tp)/100) * 10) / 10 + "×)"; $("tiltV").textContent = (S.tilt > 0 ? "+" : "") + S.tilt + "°"; $("sensV").textContent = S.sens + " / 10"; $("stripV").textContent = S.strip + "% of the picture"; }
 fillTeams(); labels();
+function setTilt(t){ S.tilt = Math.max(-45, Math.min(45, Math.round(t))); $("tilt").value = S.tilt; save(); labels(); resetBg(); }
+$("tiltM").onclick = () => setTilt(S.tilt - 1);
+$("tiltP").onclick = () => setTilt(S.tilt + 1);
+$("tilt0").onclick = () => setTilt(0);
+function setTaper(t){ S.taper = Math.max(-80, Math.min(80, Math.round(t / 5) * 5)); $("taper").value = S.taper; save(); labels(); resetBg(); }
+$("taperM").onclick = () => setTaper(S.taper - 5);
+$("taperP").onclick = () => setTaper(S.taper + 5);
+$("taper0").onclick = () => setTaper(0);
 if (!window.isSecureContext) $("secureWarn").hidden = false;
 
 /* ---------- audio ---------- */
@@ -285,7 +312,10 @@ $("camSel").onchange = () => startCam($("camSel").value);
 /* drag the line */
 function setLineFromEvent(e){
   const r = view.getBoundingClientRect();
-  S.line = S.orient === "v" ? (e.clientX - r.left) / r.width : (e.clientY - r.top) / r.height;
+  const px = (e.clientX - r.left) / r.width * view.width, py = (e.clientY - r.top) / r.height * view.height;
+  const t = Math.tan((S.tilt || 0) * Math.PI / 180);
+  // move the line so it passes through the touch point, keeping its tilt
+  S.line = S.orient === "v" ? (px - (py - view.height / 2) * t) / view.width : (py - (px - view.width / 2) * t) / view.height;
   S.line = Math.max(0.02, Math.min(0.98, S.line)); resetBg();
 }
 let dragging = false;
@@ -296,19 +326,33 @@ view.addEventListener("pointerup", () => { if (dragging){ dragging = false; save
 /* ---------- detection ---------- */
 let bg = null, occupied = false, quietFrames = 0, level = 0;
 function resetBg(){ bg = null; occupied = false; }
-function stripRect(){
-  const W = view.width, H = view.height, frac = S.strip / 100;
-  if (S.orient === "v"){ const w = Math.max(4, W * frac); return [Math.min(W - w, Math.max(0, S.line * W - w/2)), 0, w, H]; }
-  const h = Math.max(4, H * frac); return [0, Math.min(H - h, Math.max(0, S.line * H - h/2)), W, h];
+/* The timing line: centre c, unit vector u along the line, unit normal n, length L, band width w (all in video pixels). */
+function lineGeom(){
+  const W = view.width, H = view.height, a = (S.tilt || 0) * Math.PI / 180;
+  if (S.orient === "v"){
+    const u = [Math.sin(a), Math.cos(a)], L = H / Math.max(0.3, Math.cos(a)) + 4;
+    return {c: [S.line * W, H / 2], u, n: [u[1], -u[0]], L, w: Math.max(4, W * S.strip / 100), k: (S.taper || 0) / 100};
+  }
+  const u = [Math.cos(a), Math.sin(a)], L = W / Math.max(0.3, Math.cos(a)) + 4;
+  return {c: [W / 2, S.line * H], u, n: [-u[1], u[0]], L, w: Math.max(4, H * S.strip / 100), k: (S.taper || 0) / 100};
 }
 function detect(){
-  const [x, y, w, h] = stripRect();
-  const sw = S.orient === "v" ? 8 : 128, sh = S.orient === "v" ? 128 : 8;
-  samp.width = sw; samp.height = sh;
-  sctx.drawImage(video, x, y, w, h, 0, 0, sw, sh);
-  const d = sctx.getImageData(0, 0, sw, sh).data, n = sw * sh;
+  // sample the band (tilted and tapered): 8 points across it, 128 along it, from a small copy of the frame
+  const g = lineGeom(), sw = 8, sh = 128, DW = 320, sc = DW / view.width, DH = Math.round(view.height * sc);
+  if (samp.width !== DW || samp.height !== DH){ samp.width = DW; samp.height = DH; }
+  sctx.drawImage(video, 0, 0, DW, DH);
+  const img = sctx.getImageData(0, 0, DW, DH).data, n = sw * sh;
   const lum = new Float32Array(n);
-  for (let i = 0; i < n; i++) lum[i] = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+  for (let j = 0; j < sh; j++){
+    const bpos = (j + 0.5) / sh * g.L - g.L / 2, wj = g.w * (1 + g.k * (bpos / (g.L / 2)));
+    for (let i = 0; i < sw; i++){
+      const apos = ((i + 0.5) / sw - 0.5) * wj;
+      const x = Math.round((g.c[0] + g.n[0] * apos + g.u[0] * bpos) * sc), y = Math.round((g.c[1] + g.n[1] * apos + g.u[1] * bpos) * sc);
+      if (x < 0 || y < 0 || x >= DW || y >= DH){ lum[j * sw + i] = 0; continue; }
+      const q = (y * DW + x) * 4;
+      lum[j * sw + i] = 0.299 * img[q] + 0.587 * img[q + 1] + 0.114 * img[q + 2];
+    }
+  }
   if (!bg || bg.length !== n){ bg = lum; return 0; }
   const T = 62 - S.sens * 5;            // pixel change needed (sens 10 -> 12, sens 1 -> 57)
   let changed = 0;
@@ -465,12 +509,13 @@ function onFrame(now, meta){
 }
 function overlay(ft, crossing){
   const W = view.width, H = view.height, u = Math.max(1, W / 1280);
-  const [x, y, w, h] = stripRect();
-  vctx.fillStyle = occupied ? "rgba(227,18,11,.28)" : "rgba(255,194,14,.18)"; vctx.fillRect(x, y, w, h);
+  const g = lineGeom(), hl = g.L / 2, hw0 = g.w * (1 - g.k) / 2, hw1 = g.w * (1 + g.k) / 2;
+  const P = (a, b) => [g.c[0] + g.n[0] * a + g.u[0] * b, g.c[1] + g.n[1] * a + g.u[1] * b];
+  vctx.fillStyle = occupied ? "rgba(227,18,11,.28)" : "rgba(255,194,14,.18)";
+  vctx.beginPath(); [P(-hw0, -hl), P(hw0, -hl), P(hw1, hl), P(-hw1, hl)].forEach((p, k) => k ? vctx.lineTo(p[0], p[1]) : vctx.moveTo(p[0], p[1])); vctx.closePath(); vctx.fill();
   vctx.strokeStyle = occupied ? "#E3120B" : "#FFC20E"; vctx.lineWidth = 3 * u; vctx.setLineDash([12*u, 8*u]);
-  vctx.beginPath();
-  if (S.orient === "v"){ vctx.moveTo(x + w/2, 0); vctx.lineTo(x + w/2, H); } else { vctx.moveTo(0, y + h/2); vctx.lineTo(W, y + h/2); }
-  vctx.stroke(); vctx.setLineDash([]);
+  const e0 = P(0, -hl), e1 = P(0, hl);
+  vctx.beginPath(); vctx.moveTo(e0[0], e0[1]); vctx.lineTo(e1[0], e1[1]); vctx.stroke(); vctx.setLineDash([]);
   // burned-in time box
   const t = phase === "running" ? ft - goT : phase === "done" && laps.length ? laps[laps.length-1] : 0;
   const team = curRun ? curRun.team : $("team").value;
